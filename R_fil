@@ -1,11 +1,3 @@
----
-title: "Untitled"
-author: "Jonas Danielsson, Aron Enström"
-date: "`r Sys.Date()`"
-output: html_document
----
-
-
 
 ________________________________________________________________________________
 ________________________________________________________________________________
@@ -23,6 +15,7 @@ library(car)
 library(lmtest)
 library(olsrr)
 library(MASS)
+library(openxlsx)
 ```
 
 
@@ -37,8 +30,8 @@ ________________________________________________________________________________
 ##
 ## Function to remove unwanted columns from a data.frame
 ##
-## varible 1 : df - dataframe in quastion
-## varible 2 :  v - Vector of colnames getting removed
+## Variable 1 : df - dataframe in question
+## Variable 2 :  v - Vector of colnames getting removed
 ##-----------------------------------------------------------------------------
 
 omit.col <- function(df, v) {
@@ -55,25 +48,25 @@ omit.col <- function(df, v) {
 ## create_interactions
 ##
 ## Function to create first degree interactions between factors
-## as well as basevaribles squared
+## as well as basevariables squared
 ##
-## varible 1 : df - dataframe in quastion
-## varible 2 : y  - Response varible
-## varible 3 : v  - vector of varibles excluded from the process
+## Variable 1 : df - dataframe in question
+## Variable 2 : y  - Response variable
+## Variable 3 : v  - vector of variables excluded from the process
 ##-----------------------------------------------------------------------------
 
 create_interactions <- function(df, y = NULL, v = c()) {
   
   v <- as.vector(v)
   
-  # Excluderar variabler
+  # Exkluderar variabler
   cols_to_exclude <- c(y, v)
   interaction_cols <- setdiff(names(df), cols_to_exclude)
   
-  # skapar resultat vector
+  # Skapar resultat vektor
   results <- list()
   
-  # skapar interaktioner och sätter in dom i resultat
+  # skapar interaktioner och sätter in dem i resultat
   for (i in 1:(length(interaction_cols) - 1)) {
     for (j in (i):length(interaction_cols)) {
       col_name_i <- interaction_cols[i]
@@ -83,7 +76,7 @@ create_interactions <- function(df, y = NULL, v = c()) {
     }
   }
   
-  # kombinerar orignaler med nya interaktioner
+  # kombinerar orignalet med nya interaktioner
   df_with_interactions <- cbind(df, do.call(cbind, results))
   
   return(df_with_interactions)
@@ -97,59 +90,58 @@ create_interactions <- function(df, y = NULL, v = c()) {
 ## Interaction_LR_test
 ##
 ## Function that perform LR test on Interactions that have high P-values
-## Return a vector of the Varibles it removed for the reduced model
+## Return a vector of the Variables it removed for the reduced model
 ##
-## varible 1 :             Full_df - dataframe for the full modell
-## varible 2 : amount_of_basevars  - amount of varible that are not interactions
+## Variable 1 :             Full_df - dataframe for the full modell
+## Variable 2 : amount_of_basevars  - amount of Variable that are not interactions
 ##
-##      note : basevaribles need to come first in Full_df
+##      note : baseVariables need to come first in Full_df
 ##-----------------------------------------------------------------------------
 
 Interaction_LR_test <- function(Full_df, amount_of_basevars) {
-
+  
   # Full model
   model_FULL <- glm(`Shots on Target` ~ ., family = "poisson", data = Full_df)
   
-  # Tar ut interaktioner som INTE skulle vara signifikanta genom wald test
+  # Tar ut interaktioner som INTE skulle vara signifikanta genom wald-test
   pvals <- summary(model_FULL)$coefficients[, 4]
   pvals <- pvals[-(1:amount_of_basevars)]
   pvals <- pvals[pvals > 0.05]
-
+  
   # tar bort "`"
   pvals <- names(pvals)
   pvals <- str_remove_all(pvals, "`")
-
+  
   # Skapar reducerad df utan icke signifikanta interaktioner
   lessinteraction_df <- Full_df %>%
-                        omit.col(c(MDV_vec, RMV_vec, pvals))
-
+    omit.col(c(MDV_vec, RMV_vec, pvals))
+  
   # Skapar reducerad modell utan icke signifikanta interaktioner
   model_lessinteraction <- glm(`Shots on Target` ~ ., family = "poisson",
                                data = lessinteraction_df)
-
+  
   # Likelihood Test
   A <- logLik(model_lessinteraction)
   B <- logLik(model_FULL)
   teststat <- -2 * (as.numeric(A) - as.numeric(B))
-
+  
   # p-värde
   p.val <- pchisq(teststat, df = ncol(Full_df) - ncol(lessinteraction_df),
                   lower.tail = FALSE)
-
+  
   # Print p-value
   print(paste("LR Test p-värde:", p.val))
-
-  # Return the reduced data frame
+  
   return(pvals)
 }
 ```
 
 
-### forwardAIC_poisson (stulen)
+### forwardAIC_poisson 
 ```{r message=FALSE, warning=FALSE}
 
 forwardAIC_poisson <- function(data, response_var) {
-  # Correctly handle response variables with spaces or special characters
+  # Correctly handle responsevariables with spaces or special characters
   response_var_safe <- paste("`", response_var, "`", sep="")
   
   # Start with the intercept-only model
@@ -208,7 +200,7 @@ ________________________________________________________________________________
 ```{r message=FALSE, warning=FALSE}
 
 # inläsning av Datamaterialet
-Grund_data <- read_csv2(file = "R_stuff/fotbollSpelareMatch.csv")
+Grund_data <- read_csv2(file = "fotbollSpelareMatch.csv")
 
 # tar bort den extra nollan på relevanta kolumner
 Grund_data$Season <- as.numeric(Grund_data$Season) / 10
@@ -228,7 +220,7 @@ Grund_data$Division <- as.numeric(Grund_data$Division) / 10
 # Tar bort attribut-värden 
 Player_Mdf <- Grund_data[,c(1:46)]
 Player_Mdf$`Average Rating` <- NULL
-
+Player_Mdf <- Player_Mdf[Player_Mdf$Position != "GK", ]
 
 ```
 
@@ -271,7 +263,7 @@ for(i in 1:nrow(Team_Mdf)) {
     division <- Team_Mdf$Division[i]
     season <- Team_Mdf$Season[i]
     paired_row <- which(Team_Mdf$Club == opponent & Team_Mdf$Matchday == matchday &
-                      Team_Mdf$Division == division & Team_Mdf$Season == season)
+                          Team_Mdf$Division == division & Team_Mdf$Season == season)
     # Ger samma MatchID till samma match
     Team_Mdf$MatchID[i] <- pair_id
     Team_Mdf$MatchID[paired_row] <- pair_id
@@ -287,10 +279,11 @@ rm(opponent, matchday, division, season, paired_row, i, pair_id)
 
 ### Mirror Team Match-Data
 ```{r message=FALSE, warning=FALSE}
+# Depricated (användes inte till något i rapporten)
 
 # Data frame över ett lags prestationer över en match samt motståndets prestation
 
-# clonar Team_mdf
+# Klonar Team_mdf
 Mirror_Mdf <- Team_Mdf 
 
 # Deffinerar variabler över Opponent data
@@ -314,8 +307,8 @@ opponent <- Mirror_Mdf$Opponent
 for (i in 1:nrow(Mirror_Mdf)) {
   for (j in seq_along(varname)) {
     mirrormatchvec <- club[i] == opponent & matchday[i] == matchday &
-                      division[i] == division & season[i] == season
-  
+      division[i] == division & season[i] == season
+    
     
     if (any(mirrormatchvec)) {
       Mirror_Mdf[i, paste0("Opponent ", varname[j])] <- Mirror_Mdf[mirrormatchvec, varname[j]][1]
@@ -326,8 +319,8 @@ for (i in 1:nrow(Mirror_Mdf)) {
 }
 
 # Tar bort överflödiga variabler
- rm(club, baserow, opponent_index, club, matchday, division,
-    season, opponent,i, j, mirrormatchvec, var, varname)
+rm(club, baserow, opponent_index, club, matchday, division,
+   season, opponent,i, j, mirrormatchvec, var, varname)
 
 ```
 
@@ -337,18 +330,18 @@ Giving Player_MDF MAtchID
 
 Player_Mdf$MatchID <- NA
 
-# kollar för vilka iterationer Team_Mdf och Player_Mdf matchar
+# Kollar för vilka iterationer Team_Mdf och Player_Mdf matchar
 for(i in 1:nrow(Player_Mdf)) {
   match_ids <- which((Team_Mdf$Club == Player_Mdf$Opponent[i] & Team_Mdf$Opponent == Player_Mdf$Club[i] & 
-                       Team_Mdf$Matchday == Player_Mdf$Matchday[i] & 
-                       Team_Mdf$Division == Player_Mdf$Division[i] & 
-                       Team_Mdf$Season == Player_Mdf$Season[i]) |
-                     (Team_Mdf$Opponent == Player_Mdf$Club[i] & Team_Mdf$Club == Player_Mdf$Opponent[i] & 
-                       Team_Mdf$Matchday == Player_Mdf$Matchday[i] & 
-                       Team_Mdf$Division == Player_Mdf$Division[i] & 
-                       Team_Mdf$Season == Player_Mdf$Season[i]))
+                        Team_Mdf$Matchday == Player_Mdf$Matchday[i] & 
+                        Team_Mdf$Division == Player_Mdf$Division[i] & 
+                        Team_Mdf$Season == Player_Mdf$Season[i]) |
+                       (Team_Mdf$Opponent == Player_Mdf$Club[i] & Team_Mdf$Club == Player_Mdf$Opponent[i] & 
+                          Team_Mdf$Matchday == Player_Mdf$Matchday[i] & 
+                          Team_Mdf$Division == Player_Mdf$Division[i] & 
+                          Team_Mdf$Season == Player_Mdf$Season[i]))
   
-  # om det matchar, lägg till MatchID
+  # Om det matchar, lägg till MatchID
   if(length(match_ids) == 1) {
     Player_Mdf$MatchID[i] <- Team_Mdf$MatchID[match_ids]
   } 
@@ -363,45 +356,43 @@ Splitar datan så vi får tränings-data och vaildering-data
 ```{r message=FALSE, warning=FALSE}
 
 if (length(unique(Team_Mdf$MatchID)) == 1130) {
-
-# Väljer vilka matcher som går till vilken data
-
-set.seed(123)
-andel <- 0.8   #Andel av data i modell-träningen 
-unique_pairs <- unique(Team_Mdf$MatchID)
-training_pairs <- sample(unique_pairs, length(unique_pairs) * andel)
-
-
-
-# splittar Player_Mdf
-Training_Player_Mdf <- Player_Mdf[Player_Mdf$MatchID %in% training_pairs,]
-Validating_Player_Mdf <- Player_Mdf[!Player_Mdf$MatchID %in% training_pairs,]
-
-# splittar Team_Mdf
-Training_Team_Mdf <- Team_Mdf[Team_Mdf$MatchID %in% training_pairs,]
-Validating_Team_Mdf <- Team_Mdf[!Team_Mdf$MatchID %in% training_pairs,]
-
-# splittar Mirror_Mdf
-Training_Mirror_Mdf <- Mirror_Mdf[Mirror_Mdf$MatchID %in% training_pairs,]
-Validating_Team_Mdf <- Mirror_Mdf[!Mirror_Mdf$MatchID %in% training_pairs,]
-
-
-rm(unique_pairs, training_pairs)
-
-
-
-    Full_DATA <- list( "Grund_data" = Grund_data,
-                       "Player_Mdf" = Player_Mdf,
-                       "Team_Mdf" = Team_Mdf)
-    
-    Valederings_Data <- list( "Player_Mdf" = Validating_Player_Mdf,
-                              "Team_Mdf" = Validating_Team_Mdf,
-                              "Mirror_Mdf" = Validating_Team_Mdf)
-    
-    Player_Mdf <- Training_Player_Mdf
-    Team_Mdf <- Training_Team_Mdf
-    Mirror_Mdf <- Training_Mirror_Mdf
-
+  
+  # Väljer vilka matcher som går till vilken data
+  
+  set.seed(123)
+  andel <- 0.8   #Andel av data i modell-träningen 
+  unique_pairs <- unique(Team_Mdf$MatchID)
+  training_pairs <- sample(unique_pairs, length(unique_pairs) * andel)
+  
+  
+  
+  # Splittar Player_Mdf
+  Training_Player_Mdf <- Player_Mdf[Player_Mdf$MatchID %in% training_pairs,]
+  Validating_Player_Mdf <- Player_Mdf[!Player_Mdf$MatchID %in% training_pairs,]
+  
+  # Splittar Team_Mdf
+  Training_Team_Mdf <- Team_Mdf[Team_Mdf$MatchID %in% training_pairs,]
+  Validating_Team_Mdf <- Team_Mdf[!Team_Mdf$MatchID %in% training_pairs,]
+  
+  # Splittar Mirror_Mdf
+  Training_Mirror_Mdf <- Mirror_Mdf[Mirror_Mdf$MatchID %in% training_pairs,]
+  Validating_Team_Mdf <- Mirror_Mdf[!Mirror_Mdf$MatchID %in% training_pairs,]
+  
+  
+  rm(unique_pairs, training_pairs)
+  
+  Full_DATA <- list( "Grund_data" = Grund_data,
+                     "Player_Mdf" = Player_Mdf,
+                     "Team_Mdf" = Team_Mdf)
+  
+  Validerings_Data <- list( "Player_Mdf" = Validating_Player_Mdf,
+                            "Team_Mdf" = Validating_Team_Mdf,
+                            "Mirror_Mdf" = Validating_Team_Mdf)
+  
+  Player_Mdf <- Training_Player_Mdf
+  Team_Mdf <- Training_Team_Mdf
+  Mirror_Mdf <- Training_Mirror_Mdf
+  
 }
 rm(Training_Mirror_Mdf, Training_Player_Mdf, Training_Team_Mdf,
    Validating_Player_Mdf, Validating_Team_Mdf, Validating_Team_Mdf, andel)
@@ -427,18 +418,18 @@ Team_Sdf <- Team_Mdf %>%
 ### Tar bort matcher med Röda kort
 ```{r message=FALSE, warning=FALSE}
 
-# Filtrerar bort matcher under 990 minuter pga röda kort. Team_Mdf and Mirrordf
-unique_matchIDs <- unique(Team_Mdf$MatchID[!Team_Mdf$`Minutes Played` == 990])
+# Filtrerar bort matcher under 900 minuter pga röda kort. Team_Mdf and Mirrordf
+unique_matchIDs <- unique(Team_Mdf$MatchID[!Team_Mdf$`Minutes Played` == 900])
 
 Player_Mdf <- Player_Mdf[!Player_Mdf$MatchID %in% unique_matchIDs, ] %>%
-              omit.col(c("Red Cards"))
+  omit.col(c("Red Cards"))
 
 Team_Mdf <- Team_Mdf[!Team_Mdf$MatchID %in% unique_matchIDs, ] %>%
-              omit.col(c("Minutes Played", "Red Cards"))
+  omit.col(c("Minutes Played", "Red Cards"))
 
 
 Mirror_Mdf <- Mirror_Mdf[!Mirror_Mdf$MatchID %in% unique_matchIDs, ] %>%
-              omit.col(c("Opponent Minutes Played", "Minutes Played", "Red Cards"))
+  omit.col(c("Opponent Minutes Played", "Minutes Played", "Red Cards"))
 
 rm(unique_matchIDs)
 
@@ -454,13 +445,13 @@ ________________________________________________________________________________
 Model 1 - Modell över basvariabler
 ```{r message=FALSE, warning=FALSE}
 
-# Model Disruptive Varibles - vector
+# Model Disruptive Variables - vector
 MDV_vec <- c("Club", "Opponent", "Matchday", "Division", "Season",
-             "Opponent Goals", "Team_Goals", "Points", "Shots", "MatchID", "ID")
+             "Opponent Goals", "Team_Goals", "Points", "Shots", "MatchID", "ID", "Assists", "Key Passes", "Key Headers")
 
 # Modell 1
 modeldf1 <- Team_Mdf %>%
-            omit.col( c(MDV_vec))
+  omit.col( c(MDV_vec))
 
 model_1 <- glm(`Shots on Target` ~ ., family = "poisson", modeldf1)
 summary(model_1)
@@ -480,15 +471,16 @@ rm(modeldf1, model_1)
 Model 2 - Modell över basvariabler minus Multikollinära variabler 
 ```{r message=FALSE, warning=FALSE}
 
-# Redunant Multicollinary Varibles - vector
+# Redunant Multicollinary Variables - vector
 RMV_vec <- c( "Attempted Passes",      # Multikollinäritet
               "Attempted Tackles",     # Multikollinäritet
               "Attempted Headers",     # Multikollinäritet
-              "Key Passes")            # För hög korrelation med Y = shots
+              "Key Passes",
+              "Assists")            # För hög korrelation med Y = shots
 
-# Modell 2
+# Modell 2, ingen multikollinearitet
 modeldf2 <- Team_Mdf %>%
-            omit.col( c(MDV_vec, RMV_vec))
+  omit.col( c(MDV_vec, RMV_vec))
 
 model_2 <- glm(`Shots on Target` ~ ., family = "poisson", modeldf2)
 summary(model_2)
@@ -504,11 +496,11 @@ rm(modeldf2, model_2)
 Model 3 (Full) - Modell över (basvariabler, interaktioner och kvadrater), minus  Multikollinära basvariabler 
 ```{r message=FALSE, warning=FALSE}
 
-# Modell 3
+# Modell 3, interaktioner tillagda, våran fulla modell
 
 modeldf3 <- Team_Mdf %>%
-            omit.col( c(MDV_vec, RMV_vec)) %>%
-            create_interactions(y = "Shots on Target")
+  omit.col( c(MDV_vec, RMV_vec)) %>%
+  create_interactions(y = "Shots on Target")
 
 model_3 <- glm(`Shots on Target` ~ ., family = "poisson", modeldf3)
 
@@ -520,18 +512,19 @@ rm(model_3, modeldf3)
 ```
 
 
-Model 4 - Reducerad med hjälp av LR-test på variabler med högt p-värde på wald-test
+Model 4 - Reducerad med hjälp av LR-test på interaktioner med högt p-värde på wald-test
 ```{r message=FALSE, warning=FALSE}
 
+
 Var_Red_vec <- Interaction_LR_test(
-                Models[["Model_3(FULL)"]][["modeldf3"]],   # Full modell
-                ncol(Models[["Model_2"]][["modeldf2"]]))   # Antalet basvariabler
+  Models[["Model_3(FULL)"]][["modeldf3"]],   # Full modell
+  ncol(Models[["Model_2"]][["modeldf2"]]))   # Antalet basvariabler
 
 # Då p-val är över 0.05 använder vi modellen med färre interaktioner
 
 
 Reduced_df1 <- Models[["Model_3(FULL)"]][["modeldf3"]] %>%
-                  omit.col( c(MDV_vec, RMV_vec, Var_Red_vec ))
+  omit.col( c(MDV_vec, RMV_vec, Var_Red_vec ))
 
 
 model_4 <- glm(`Shots on Target` ~ ., family = "poisson", Reduced_df1)
@@ -567,37 +560,46 @@ ________________________________________________________________________________
 model <- Models[["Model_5"]][["model_5"]]
 data_frame <- Models[["Model_5"]][["Reduced_df2"]]
 
+extrema_goals <- unique(Team_Mdf$ID[(Team_Mdf$Team_Goals + Team_Mdf$`Opponent Goals`) > 8 & abs(Team_Mdf$Team_Goals - Team_Mdf$`Opponent Goals`) > 4])
+Extrem_värden <- c(c(441, 1396), c(1471, 1644), extrema_goals)
+
 leverage <- lm.influence(model)$hat
-leverage_plot <- data.frame("ID" = 1:length(leverage), "leverage" = leverage)
+leverage_plot <- data.frame("ID" = 1:length(leverage), "Leverage" = leverage)
 n <- nrow(data_frame)
 p <- length(model[["coefficients"]])
-ggplot(leverage_plot) + aes(x = ID, y = leverage) + geom_point() + theme_bw() +
-geom_hline(yintercept = 2*p/n, col = "red"  )
+ggplot(leverage_plot) + aes(x = ID, y = Leverage) + geom_point(data = leverage_plot[!(leverage_plot$ID %in% Extrem_värden), ], alpha = 0.6) + geom_point(data = leverage_plot[leverage_plot$ID %in% Extrem_värden, ], col = "#ff9900") +
+  geom_point(data = leverage_plot[c(1471, 1644), ], col = "#48adb7") +
+  geom_point(data = leverage_plot[c(441, 1396), ], col = "#48adb7") +
+  theme_bw() + ggtitle("Graf över leverage-värdet för alla obseravationer")
 
 
 
 leverage_plot <- leverage_plot[order(-leverage), ]
 data_frame["ID"] <- 1:n
-View(data_frame[data_frame$ID %in% leverage_plot[1:10, 1], ])
+#View(data_frame[data_frame$ID %in% leverage_plot[1:10, 1], ])
 
 Team_Mdf["ID"] <- 1:n
-View(Team_Mdf[Team_Mdf$ID %in% leverage_plot[1:10, 1], ])
-
+#View(Team_Mdf[Team_Mdf$ID %in% leverage_plot[1:10, 1], ])
+#View(Team_Mdf[Team_Mdf$ID %in% leverage_plot[1:3, 1], ])
 rm(leverage, leverage_plot, n, p, model, data_frame)
 ```
 
 
 ```{r}
+#matchid =  1102 är den som passar mycket, ID = c(1471, 1644)
+#514 = matchid, c(441, 1396) = ID, 5 clearances, 5-0. 
 
-Extrem_värden <- c(53,  164,  342,  386, 1061, 1102, 1098)
+extrema_goals <- unique(Team_Mdf$MatchID[(Team_Mdf$Team_Goals + Team_Mdf$`Opponent Goals`) > 8 & abs(Team_Mdf$Team_Goals - Team_Mdf$`Opponent Goals`) > 4])
+Extrem_värden <- c(1102, 514, extrema_goals)
 Reduced_df3.0 <- Team_Mdf[!Team_Mdf$MatchID %in% Extrem_värden,]
 
 Reduced_df3 <- Reduced_df3.0 %>%
-            omit.col( c(MDV_vec, RMV_vec)) %>% 
-            create_interactions(y = "Shots on Target") %>%
-            omit.col( c(Var_Red_vec)) 
+  omit.col( c(MDV_vec, RMV_vec)) %>% 
+  create_interactions(y = "Shots on Target") %>%
+  omit.col( c(Var_Red_vec)) 
 
 
+# Modell 6, vår slutgilltiga modell, efter extremvärden är borttagna
 model_6 <- forwardAIC_poisson(Reduced_df3 ,"Shots on Target")
 
 summary(model_6)
@@ -605,37 +607,11 @@ summary(model_6)
 Models[["Model_6"]] <- list("Reduced_df3" = Reduced_df3,"model_6" = model_6)
 
 
-rm(noll_skott_id, Reduced_df3.0, model_6)
-```
-
-
-```{r}
-model <- Models[["Model_6"]][["model_6"]]
-data_frame <- Models[["Model_6"]][["Reduced_df3"]]
-
-leverage <- lm.influence(model)$hat
-leverage_plot <- data.frame("ID" = 1:length(leverage), "leverage" = leverage)
-n <- nrow(data_frame)
-p <- length(model[["coefficients"]])
-ggplot(leverage_plot) + aes(x = ID, y = leverage) + geom_point() + theme_bw() +
-geom_hline(yintercept = 2*p/n, col = "red"  )
-
-
-
-leverage_plot <- leverage_plot[order(-leverage), ]
-data_frame["ID"] <- 1:n
-# View(data_frame[data_frame$ID %in% leverage_plot[1:10, 1], ])
-
-
-rm(leverage, leverage_plot, n, p, model, data_frame)
+rm(model_6)
 ```
 
 
 
-
-
-________________________________________________________________________________
-________________________________________________________________________________
 
 
 ```{r message=FALSE, warning=FALSE}
@@ -644,264 +620,298 @@ model <- Models[["Model_6"]][["model_6"]]
 
 Y <- model[["model"]]$`Shots on Target`
 fits <- model[["fitted.values"]]
-  
+
 plot_df <- data.frame("Y" = Y, "fits" = fits)
 
+p1 <- ggplot(plot_df) + geom_histogram(aes(x = fits), col = "black", fill = "#e6e5e1", alpha = 1, binwidth = 1) +
+  geom_bar(aes(x = Y), col = "#409891", fill = "#48adb7", width = 0.2, alpha = 1) +
+  theme_bw() + xlim(-1, 25) + labs(x= "Skott på mål", y = "") + ggtitle("Fördelning i träningsdatan")
 
+# Skapar prediktioner i valideringsdata
+
+Validation_df_X <- create_interactions(Validerings_Data$Team_Mdf, y = "Shots on Target", v = c("Name", "Nationality", "Position", "Result", MDV_vec))
+Validation_df_X <- Validation_df_X[str_remove_all(names(model$coefficients), "`")[-1]]
+Validation_df_X <- cbind(1, Validation_df_X)
+beta <- model$coefficients
+
+Validation_df_X["fits"] <- 0
+for (i in seq(nrow(Validation_df_X)) ) {
+  #browser()
+  Validation_df_X$fits[i] <-  sum(unlist(Validation_df_X[i, ])[-ncol(Validation_df_X)]*beta)
+}
+
+
+plot_df <- data.frame("Y" = Validerings_Data$Team_Mdf$`Shots on Target`, "fits" = exp(Validation_df_X$fits))
+
+p2 <- ggplot(plot_df) + geom_histogram(aes(x = fits), col = "black", fill = "#e6e5e1", alpha = 1, binwidth = 1) +
+  geom_bar(aes(x = Y), col = "#409891", fill = "#48adb7", width = 0.2, alpha = 1) +
+  theme_bw() + xlim(-1, 25) + labs(x= "Skott på mål", y = "") + ggtitle("Fördelning i valideringsdatan")
 
 ggarrange(
-ggplot(plot_df) + geom_histogram(aes(x = Y), col = "black", fill = "lightblue", binwidth = 1) +
-  theme_bw() + xlim(-1, 25) + labs(x = ""),
-ggplot(plot_df) + geom_histogram(aes(x = fits), col = "black", fill = "orange", binwidth = 1) +
-  theme_bw() + xlim(-1, 25)
-
+  p1,
+  p2
 )
 
-ggplot(plot_df) + geom_histogram(aes(x = Y), col = "lightblue", fill = "lightblue", binwidth = 1) +
-geom_histogram(aes(x = fits), col = "black", fill = "darkorange", alpha = 0.4, binwidth = 1) +
-  theme_bw() + xlim(-1, 25)
-
-
-
-rm(model_6, Y, fits, plot_df)
-```
-
-```{r message=FALSE, warning=FALSE}
-
-write.xlsx(Grund_data, "R_stuff/XLSX/Grund_Data.xlsx")
-# write.xlsx(Full_DATA, "R_stuff/XLSX/Full_DATA.xlsx")
-# write.xlsx(Team_Mdf, "R_stuff/XLSX/Team_MDF_Beta.xlsx")
-# write.xlsx(Player_Mdf, "R_stuff/XLSX/Player_MDF_Beta.xlsx")
-
+rm(model_6, Y, fits, plot_df, p1, p2)
 ```
 
 
-Ej, Organiserat 
-
-team_season_df 
-
 ```{r message=FALSE, warning=FALSE}
-team_season_df <- aggregate( . ~ Club+Division+Season, data = matchdf[, !(colnames(matchdf) %in% c("Result", "Opponent"))], FUN=sum)
 
-team_season_df[, 2] <- team_season_df$Goals/team_season_df$`Shots on Target`
-team_season_df <- team_season_df[, 1:3]
-colnames(team_season_df)[2] <- "Shot_Effectiveness"
+Team_Sdf["Shot_Effectiveness"] <- Team_Sdf$Team_Goals/Team_Sdf$`Shots on Target`
 
 shot_e_lookup <- function(club, season) {
   
-  return(team_season_df$Shot_Effectiveness[team_season_df$Club == club & team_season_df$Season == season])
+  return(Team_Sdf$Shot_Effectiveness[Team_Sdf$Club == club & Team_Sdf$Season == season])
 }
 
-create_interaction_vec <- function(row_cleandf, startindex = 5) {
-  # Skapar interaktioner
+
+
+df_X <- cbind(1, Models[["Model_3(FULL)"]][["modeldf3"]])
+
+#För valideringsdata:
+#df_X <- Validation_df_X <- cbind(1, create_interactions(Validerings_Data$Team_Mdf, y = "Shots on Target", v = c("Name", "Nationality", "Position", "Result", MDV_vec)))
+
+colnames(df_X)[1] <- "(Intercept)"
+df_X <- df_X[, str_remove_all(names(Models$Model_6$model_6$coefficients), "`")]
+antal_variabler <- ncol(df_X)
+opponent_index <- (antal_variabler + 2):(2*antal_variabler + 1)
+df_X["MatchID"] <- Team_Mdf$MatchID
+df_X <- df_X[df_X$MatchID%in%Reduced_df3.0$MatchID, ]
+
+
+
+df_X[, opponent_index] <- 0
+colnames(df_X)[opponent_index] <- str_c("O ", colnames(df_X)[1:antal_variabler])
+
+# Lägger motståndarnas prestaioner på samma rad som de egna prestationerna så att resultatet för
+# modellen kan predikteras mha Epts_function
+for (i in seq(nrow(df_X)) ) {
+  opponents_match <- df_X$MatchID %in% df_X$MatchID[i]
+  opponents_match[i] <- FALSE
+  df_X[i, opponent_index] <- df_X[ opponents_match, 1:antal_variabler]
   
-    interactions <- c(cleandf[row_cleandf, 2 + startindex] * c(cleandf[row_cleandf, 1 + startindex], cleandf[row_cleandf, 3 + startindex]), cleandf[row_cleandf, 6 + startindex] * cleandf[row_cleandf, 3 + startindex])
-  
-  
-  c(1, unlist((cleandf[row_cleandf, (startindex + 1):((startindex - 1) + modelamount)])), interactions)
 }
 
-modelnames <- str_remove_all(names(model_training$coefficients)[-1], "`")
-
-
-Epts_function <- function(row_in_cleandf) {
+Epts_function <- function(row_in_df_X, model = Models$Model_6$model_6) {
   
   
-  shot_effectiveness_f <- shot_e_lookup(cleandf$Club[row_in_cleandf], cleandf$Season[row_in_cleandf])
-  shot_effectiveness_o <- shot_e_lookup(cleandf$Opponent[row_in_cleandf], cleandf$Season[row_in_cleandf])
+  shot_effectiveness_f <- shot_e_lookup(Reduced_df3.0$Club[row_in_df_X], Reduced_df3.0$Season[row_in_df_X])
+  shot_effectiveness_o <- shot_e_lookup(Reduced_df3.0$Opponent[row_in_df_X], Reduced_df3.0$Season[row_in_df_X])
   
-  #Denna om percentage delta bör vara med
-  #Beta_ordered <- model_training$coefficients[c(1:4, 7:9, 12:15, 11, 5:6, 10)]
-  Beta_ordered <- model_training$coefficients[c(1:4, 7:9, 12:14, 5:6, 10)]
+  Beta <- model$coefficients
   
-  # Lägg in interaktioner i cleandf, i rätt ordning för att det här ska funka
-  E_shots_f <- exp( sum( Beta_ordered * create_interaction_vec(row_cleandf = row_in_cleandf, startindex = 5) ) )
-  E_shots_o <- exp( sum( Beta_ordered * create_interaction_vec(row_cleandf = row_in_cleandf, startindex = 15) ) )
-  
+  # Lägg in interaktioner i df_X, i rätt ordning för att det här ska funka
+  E_shots_f <- exp( sum( Beta * df_X[row_in_df_X, 1:antal_variabler] ) )
+  E_shots_o <- exp( sum( Beta * df_X[row_in_df_X, opponent_index] ) )
   lamda_friendly <- shot_effectiveness_f * E_shots_f
   lambda_oppo <- shot_effectiveness_o * E_shots_o
+  
+  Pr_win <- 0
+  Pr_draw <- 0
+  
+  for (goalamount in 0:20 ) {
+    Pr_win <- Pr_win + ppois(goalamount - 1, lambda = lambda_oppo, lower.tail = TRUE) * 
+      dpois(goalamount, lambda = lamda_friendly)
     
-  sum3 <- 0
-  sum1 <- 0
-  accuracy <- 10
-  
-  for (a in seq(accuracy) ) {
-    for (j in seq(a+1, accuracy) ) {
-      sum3 <- sum3 + 3*(lamda_friendly^j * lambda_oppo^a)/(factorial(a)*factorial(j))
-      
-    }  
+    Pr_draw <- Pr_draw + dpois(goalamount, lambda = lamda_friendly) * dpois(goalamount, lambda = lambda_oppo)
+    
   }
-  
-  for (a in seq(accuracy) ) {
-      sum1 <- sum1 + (lamda_friendly^a * lambda_oppo^a)/(factorial(a)*factorial(a))
 
-  }  
-  
-  return( exp(-lamda_friendly - lambda_oppo)*(3*sum3 + sum1) )
+  return( c(3*Pr_win + 1*Pr_draw, Pr_win, Pr_draw, 1-Pr_win-Pr_draw) )
 }
 
-Epts <- c()
-for (i in seq(nrow(cleandf))) {
-
-  Epts[i] <- Epts_function(i)
+Epts <- as.data.frame(matrix(0, nrow(df_X), 4))
+colnames(Epts) <- c("Epts", "Pr_win", "Pr_draw", "Pr_loss")
+for (i in seq(nrow(df_X))) {
+  
+  Epts[i, ] <- Epts_function(i)
   
 }
 
-cleandf["Epts"] <- Epts
+df_X <- cbind(df_X, Epts)
+Team_Mdf_noextreme <- Team_Mdf[Team_Mdf$MatchID%in%Reduced_df3.0$MatchID, ]
+df_X["Club"] <- Team_Mdf_noextreme$Club
+
+Team_Mdf_noextreme["Outcome"] <- 3 * as.numeric(Team_Mdf_noextreme$Team_Goals > Team_Mdf_noextreme$`Opponent Goals`)
+Team_Mdf_noextreme$Outcome[Team_Mdf_noextreme$Team_Goals == Team_Mdf_noextreme$`Opponent Goals`] <- 1
+
+# För valideringsdata:
+# Validerings_Data$Team_Mdf["Outcome"] <- 3 * as.numeric(Validerings_Data$Team_Mdf$Team_Goals > Validerings_Data$Team_Mdf$`Opponent Goals`)
+# Validerings_Data$Team_Mdf$Outcome[Validerings_Data$Team_Mdf$Team_Goals == Validerings_Data$Team_Mdf$`Opponent Goals`] <- 1
+# 
+# df_X["Outcome"] <- Validerings_Data$Team_Mdf$Outcome
+
+df_X["Outcome"] <- Team_Mdf_noextreme$Outcome
 
 
 
 ```
 
+Utvärdering av Pr_win Pr_draw Pr_loss
+```{r}
+df_X["Correct_prediction"] <- 0
 
 
-Ej, Organiserat 
+for (i in seq(nrow(df_X)) ) {
+
+  Max <- max(df_X$Pr_win[i], df_X$Pr_draw[i], df_X$Pr_loss[i])
+  if (df_X$Outcome[i] == 3) {
+    if (Max == df_X$Pr_win[i]) {
+      df_X$Correct_prediction[i] <- 1
+    }
+  }
+  else if(df_X$Outcome[i] == 1) {
+    if (Max == df_X$Pr_draw[i]) {
+      df_X$Correct_prediction[i] <- 1
+    }
+  }
+  else if(df_X$Outcome[i] == 0){
+    if (Max == df_X$Pr_loss[i]) {
+      df_X$Correct_prediction[i] <- 1
+    }
+  }
+  
+}
+
+# Räknar ut hur bra modellen predikterar olika typer av matcher, draws, wins, losses.
+mean(df_X$Correct_prediction)
+mean(df_X[df_X$Outcome==3, ]$Correct_prediction)
+mean(df_X[df_X$Outcome==0, ]$Correct_prediction)
+mean(df_X[df_X$Outcome==1, ]$Correct_prediction)
+
+excel_df <- cbind(df_X[c(1:3, 1070), c(23:25)]%>%round(2), c("Draw", "Win", "Loss", "Loss"), df_X[c(1:3, 1070), 28]%>%round(2))
+colnames(excel_df) <- c("P(Win)", "P(Draw)", "P(Loss)", "Outcome", "Correct prediction?")
+
+```
+
+Plottar devianser mot Y_hat för träning och valideringsdata
+```{r}
+ggplot(df_X) + geom_bar(aes(x=Outcome), col = "black", fill = "#48adb7") + 
+  geom_histogram(aes(x=Epts), col = "black", fill = "#ff9900", bins = 4, alpha = 0.8) +
+  theme_bw()
+
+# Räknar ut devianser men struntar i y = 0.
+Poisson.dev<-function(y, y_hat){
+
+  answer <- sqrt( 2*( y*log(y/y_hat) - y + y_hat ) )
+  #answer[y==0] <- 2*y_hat
+  return(answer)
+  }
+residuals.deviance<- sqrt(Poisson.dev(Models[["Model_6"]][["Reduced_df3"]]$`Shots on Target`, Models[["Model_6"]][["model_6"]]$fitted.values))*ifelse(Models[["Model_6"]][["Reduced_df3"]]$`Shots on Target` > Models[["Model_6"]][["model_6"]]$fitted.values, 1, -1)
+
+plot_df <- data.frame("Devians-Residualer" = residuals.deviance,
+                         "Predikterade värden" = Models[["Model_6"]][["model_6"]]$fitted.values)
+colnames(plot_df) <- c("Devians-Residualer", "Predikterade värden")
+p1 <- ggplot(plot_df) + 
+  geom_hline(yintercept = 0, col = "#ff9900") + 
+  geom_point(aes(y = `Devians-Residualer`, x = `Predikterade värden`), col = "black", alpha = 0.6) + 
+  theme_bw() + ylim(-2, 2) + xlim(0, 22) + ggtitle("Träningsdata")
+
+p2 <- ggplot(Team_Mdf_noextreme) + geom_bar(aes(x=`Shots on Target`), col = "black", fill = "#48adb7") + theme_bw() + labs(y = "", x = "Skott på mål") + xlim(0, 23)
+
+#Valideringsdata:
+residuals.deviance<- sqrt(Poisson.dev(Validerings_Data$Team_Mdf$`Shots on Target`, exp(Validation_df_X$fits)))*ifelse(Validerings_Data$Team_Mdf$`Shots on Target` > exp(Validation_df_X$fits), 1, -1)
+
+plot_df <- data.frame("Devians-Residualer" = residuals.deviance,
+                         "Predikterade värden" = exp(Validation_df_X$fits))
+colnames(plot_df) <- c("Devians-Residualer", "Predikterade värden")
+p3 <- ggplot(plot_df) + 
+  geom_hline(yintercept = 0, col = "#ff9900") + 
+  geom_point(aes(y = `Devians-Residualer`, x = `Predikterade värden`), col = "black", alpha = 0.6) + 
+  ylim(-2, 2) + xlim(0, 22) +
+  theme_bw() + ggtitle("Valideringsdata")
+
+
+p4 <- ggplot(Validerings_Data$Team_Mdf) + geom_bar(aes(x=`Shots on Target`), col = "black", fill = "#48adb7") + theme_bw() + labs(y = "", x = "Skott på mål") + xlim(0, 23)
+
+ggarrange(p1, p3, p2, p4)
+
+rm(p1, p2)
+```
+
+Plottar fördelning på 'shots on target'
+```{r}
+
+mean(Team_Mdf$`Shots on Target`)
+var(Team_Mdf$`Shots on Target`)
+
+x_values <- 0:max(Team_Mdf$`Shots on Target`, na.rm = TRUE)
+
+# Poisson probabilities
+poisson_probs <- dpois(x_values, lambda = mean(Team_Mdf$`Shots on Target`))
+
+# Create a dataframe for the Poisson data
+poisson_data <- data.frame(Shots = x_values, Probability = poisson_probs)
+
+# Multiply by total number of observations to scale it to the histogram
+poisson_data$Probability <- poisson_data$Probability * nrow(Team_Mdf)
+
+# Create the histogram and add the Poisson curve
+ggplot(Team_Mdf, aes(x = `Shots on Target`)) +
+    geom_histogram(aes(y = ..count..), binwidth = 1, fill = "#bad0cc", color = "black") +
+    geom_line(data = poisson_data, aes(x = Shots, y = Probability), color = "#ff9900", size = 1.5) +
+    labs(title = "Fördelning 'Team Match Data' - Shots on Target ",
+         x = "Shots on Target",
+         y = "") +
+    theme_bw() +
+    theme(axis.text.x = element_text(size = 12, face = "bold"), 
+          axis.text.y = element_text(size = 12, face = "bold"))
+```
+
+
+
+```{r}
+
+
+PAR_df <- Player_Mdf[, !str_detect(colnames(Player_Mdf), "%")]
+PAR_df <- create_interactions(PAR_df, y = "Shots on Target", v = c("Name", "Nationality", "Position", "Result", MDV_vec))
+PAR_df["(Intercept)"] <- 1
+
+
+
+PAR_df <- PAR_df[PAR_df$MatchID%in%df_X$MatchID, c(colnames(df_X)[1:(antal_variabler + 1)], "Minutes Played", "Club", "Season", "Name")]
+
+average_player_contributions_perminute <- colMeans(PAR_df[1:antal_variabler]/PAR_df$`Minutes Played`)
+average_player_contributions_perminute[1] <- 1/90
+
+PAR_df["Epts"] <- 0
+
+# Ersätter spelaren med en generisk spelare och räknar ut skillnaden i förväntade
+# ligapoäng som ett PAR-mått
+for (i in seq(nrow(PAR_df)) ) {
+  
+    matchindex_i_df_X <- which(PAR_df$MatchID[i] == df_X$MatchID & 
+                         PAR_df$Club[i] == df_X$Club)
+  
+    spelare_att_byta_ut <- PAR_df[i, 1:antal_variabler]
+    
+    df_X[matchindex_i_df_X, 1:antal_variabler] <- df_X[matchindex_i_df_X, 1:antal_variabler] - spelare_att_byta_ut + 
+        average_player_contributions_perminute * PAR_df$`Minutes Played`[i]
+      
+    points <- Epts_function(matchindex_i_df_X)[1]
+    
+    df_X[matchindex_i_df_X, 1:antal_variabler] <- df_X[matchindex_i_df_X, 1:antal_variabler] + spelare_att_byta_ut - 
+      average_player_contributions_perminute * PAR_df$`Minutes Played`[i]
+    
+    PAR_df$Epts[i] <- df_X$Epts[matchindex_i_df_X] - points
+   
+}
+
+
+```
 
 ```{r message=FALSE, warning=FALSE}
 
 
-matchdf2 <- readRDS("matchdf2.rds")
-# Hitta spelares nivåer
-matchdf2 <- read_csv2(file = "fotbollSpelareMatch.csv", show_col_types = FALSE)
-
-matchdf2$Season <- matchdf2$Season / 10
-matchdf2$Division <- matchdf2$Division / 10
-
-# Vi måste även ta bort spelar utan red cards då en spelare i matchen fick ett red card
-# Markerar alla spelare som spelat i en match med röda kort
-# Vi behöver även ta bort spelare där matchen inte hade 990 minuter
-
-for (i in seq(nrow(matchdf2)) ) {
-  
-sameteam_vec <- matchdf2$Club[i] == teamdf$Club &
-                matchdf2$Opponent[i] == teamdf$Opponent & 
-                matchdf2$Matchday[i] == teamdf$Matchday & 
-                matchdf2$Division[i] == teamdf$Division & 
-                matchdf2$Season[i] == teamdf$Season
-same_index <- which(sameteam_vec)
-
-oppoteam_vec <- matchdf2$Club[i] == teamdf$Opponent &
-                matchdf2$Opponent[i] == teamdf$Club & 
-                matchdf2$Matchday[i] == teamdf$Matchday & 
-                matchdf2$Division[i] == teamdf$Division & 
-                matchdf2$Season[i] == teamdf$Season
-
-oppo_index <- which(oppoteam_vec)
-
-#$`Red Cards`
-matchdf2[i, 38] <- teamdf[same_index, ]$`Red Cards` | 
-                   teamdf[oppo_index, ]$`Red Cards` |
-                   (teamdf[same_index, ]$`Minutes Played` != 990) | 
-                   (teamdf[oppo_index, ]$`Minutes Played` != 990) 
-
-}
-
-# check att det blev rätt: View(matchdf2[matchdf2$Club == "Tokyo S.C.", ])
-# View(matchdf2[matchdf2$Club == "Reykjavik United", ]), funkar!
+#saveRDS(PAR_df, "PAR_df.rds")
+#PAR_df <- readRDS("PAR_df.rds")
 
 
-matchdf2 <- matchdf2[matchdf2$`Red Cards` == 0, ]
-
-
-
-
-
-
-
-
-
-
-# Filtrerar bort matcher under 990 minuter pga röda kort. K
-teamdf <- teamdf[teamdf$`Minutes Played` == 990, ]
-teamdf$`Red Cards` <- NULL
-teamdf$`Minutes Played` <- NULL
-
-
-matchdf2 <- cbind(matchdf2$Name, matchdf2[, colnames(matchdf2) %in% colnames(cleandf)[1:15]], matchdf2$`Minutes Played`)
-colnames(matchdf2)[c(1, 17)] <- c("Name", "Minutes Played")
-
-matchdf2["Epts"] <- 0
-
-debug <- c()
-
-
-
-
-for (i in seq(nrow(matchdf2))) {
-
-# Hittar spelarens match i lag-dataframen
-
-
-mirrormatchvec <- matchdf2$Club[i] == cleandf$Club & 
-                  matchdf2$Matchday[i] == cleandf$Matchday & 
-                  matchdf2$Division[i] == cleandf$Division & 
-                  matchdf2$Season[i] == cleandf$Season
-
-
-# Hittar spelarens matchindex i lag-dataframen
-matchindex_i_cleandf <- which(mirrormatchvec)
-
-
-
-  
-  
-  
-  
-  player_contributions <-  matchdf2[colnames(cleandf)[6:15]][i, ]
-  
-  # Hur räknar vi ut en bra replacement och tar hänsyn till minutes played? 
-  # Vi vill ha ett mått på average contribution per minut. 
-  average_player_contributions_perminute <- colMeans(matchdf2[colnames(cleandf)[6:15]]/matchdf2$`Minutes Played`)
-
-  # weightstest <- lapply(matchdf2[colnames(cleandf)[6:15]], weighted.mean,  w = matchdf2$`Minutes Played`)/90
-  
-  
-  if (is_empty(matchindex_i_cleandf)) {
-    debug <- c(debug, i)
-    matchdf2$Epts[i] <- 10000
-  } else {
-    
-    
-  cleandf[matchindex_i_cleandf, 6:15] <- cleandf[matchindex_i_cleandf, 6:15] - player_contributions + average_player_contributions_perminute * matchdf2$`Minutes Played`[i]
-  points <- Epts_function(matchindex_i_cleandf)
-  cleandf[matchindex_i_cleandf, 6:15] <- cleandf[matchindex_i_cleandf, 6:15] + player_contributions - average_player_contributions_perminute * matchdf2$`Minutes Played`[i]
-  matchdf2$Epts[i] <- cleandf$Epts[matchindex_i_cleandf] - points
-  
-  
-  }
-  if (i %% 400 == 0) {cat("\n", i, "\n", length(debug))}
-  
-  
-}
-
-bugfinder <- function(i) {
-  View(matchdf2[i, ])
-  mirrormatchvec <- matchdf2$Club[i] == cleandf$Club & 
-                  matchdf2$Matchday[i] == cleandf$Matchday & 
-                  matchdf2$Division[i] == cleandf$Division & 
-                  matchdf2$Season[i] == cleandf$Season
-  
-  matchindex_i_cleandf <- which(mirrormatchvec)
-  view(cleandf[matchindex_i_cleandf, ])
-}
-
-saveRDS(matchdf2, "matchdf2.rds")
-
-
-
-```
-
-
-```{r}
-matchdf2 <- readRDS("matchdf2.rds")
-matchdf2$Matchday <- NULL
-matchdf2$Division <- NULL
-matchdf2$Club <- NULL
-matchdf2$Opponent <- NULL
-
-# points above replacement per season
-seasondf <- aggregate( . ~ Name+Season, data = matchdf2, FUN=sum)
-
-
-
+# Aggregerar spelarnas PAR på säsonger
+Season_PAR <- PAR_df[, (antal_variabler+2):ncol(PAR_df)] %>%
+  omit.col(c("Club")) %>% # Tar bort variabler
+  group_by(Season, Name) %>% # Agregerar på
+  summarise(across(everything(), sum, na.rm = TRUE), .groups = 'drop') # Tar summan av alla variabler
+Season_PAR$Epts <- Season_PAR$Epts / (Season_PAR$`Minutes Played` / 90)
 ```
