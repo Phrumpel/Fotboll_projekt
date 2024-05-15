@@ -838,16 +838,13 @@ var(Team_Mdf$`Shots on Target`)
 
 x_values <- 0:max(Team_Mdf$`Shots on Target`, na.rm = TRUE)
 
-# Poisson probabilities
+
 poisson_probs <- dpois(x_values, lambda = mean(Team_Mdf$`Shots on Target`))
 
-# Create a dataframe for the Poisson data
 poisson_data <- data.frame(Shots = x_values, Probability = poisson_probs)
 
-# Multiply by total number of observations to scale it to the histogram
 poisson_data$Probability <- poisson_data$Probability * nrow(Team_Mdf)
 
-# Create the histogram and add the Poisson curve
 ggplot(Team_Mdf, aes(x = `Shots on Target`)) +
     geom_histogram(aes(y = ..count..), binwidth = 1, fill = "#bad0cc", color = "black") +
     geom_line(data = poisson_data, aes(x = Shots, y = Probability), color = "#ff9900", size = 1.5) +
